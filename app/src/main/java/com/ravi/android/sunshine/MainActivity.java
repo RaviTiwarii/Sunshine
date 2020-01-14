@@ -1,39 +1,113 @@
 package com.ravi.android.sunshine;
 
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.ravi.android.sunshine.data.SunshinePreferences;
+import com.ravi.android.sunshine.utilities.NetworkUtils;
+import com.ravi.android.sunshine.utilities.OpenWeatherJsonUtils;
+
+import org.json.JSONException;
+
+import java.io.IOException;
+import java.net.URL;
 
 public class MainActivity extends AppCompatActivity {
 
     private TextView mWeatherTextView;
+    private TextView mErrorMessageDisplay;
+    private ProgressBar mLoadingIndicator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_forecast);
 
         mWeatherTextView = findViewById(R.id.tv_weather_data);
+        mErrorMessageDisplay = findViewById(R.id.tv_error_message_display);
+        mLoadingIndicator = findViewById(R.id.pb_loading_indicator);
 
-        String[] dummyWeatherData = {
-            "Today, May 17 - Clear - 17°C / 15°C",
-            "Tomorrow - Cloudy - 19°C / 15°C",
-            "Thursday - Rainy- 30°C / 11°C",
-            "Friday - Thunderstorms - 21°C / 9°C",
-            "Saturday - Thunderstorms - 16°C / 7°C",
-            "Sunday - Rainy - 16°C / 8°C",
-            "Monday - Partly Cloudy - 15°C / 10°C",
-            "Tue, May 24 - Meatballs - 16°C / 18°C",
-            "Wed, May 25 - Cloudy - 19°C / 15°C",
-            "Thu, May 26 - Stormy - 30°C / 11°C",
-            "Fri, May 27 - Hurricane - 21°C / 9°C",
-            "Sat, May 28 - Meteors - 16°C / 7°C",
-            "Sun, May 29 - Apocalypse - 16°C / 8°C",
-            "Mon, May 30 - Post Apocalypse - 15°C / 10°C",
-        };
+        loadWeatherData();
+    }
 
-        for (String dummyWeatherDay : dummyWeatherData)
-            mWeatherTextView.append(dummyWeatherDay + "\n\n\n");
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.forecast, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        int selectedMenuItemId = item.getItemId();
+
+        if (selectedMenuItemId == R.id.action_refresh) {
+            mWeatherTextView.setText("");
+            loadWeatherData();
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void loadWeatherData() {
+        showWeatherDataView();
+        String location = SunshinePreferences.getPreferredWeatherLocation(this);
+        new FetchWeatherTask().execute(location);
+    }
+
+    private void showWeatherDataView() {
+        mErrorMessageDisplay.setVisibility(View.INVISIBLE);
+        mWeatherTextView.setVisibility(View.VISIBLE);
+    }
+
+    private void showErrorMessage() {
+        mWeatherTextView.setVisibility(View.INVISIBLE);
+        mErrorMessageDisplay.setVisibility(View.VISIBLE);
+    }
+
+    public class FetchWeatherTask extends AsyncTask<String, Void, String[]> {
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            mLoadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        protected String[] doInBackground(String... params) {
+            if (params.length == 0) return null;
+
+            String location = params[0];
+            URL weatherRequestUrl = NetworkUtils.buildUrl(location);
+
+            try {
+                String jsonWeatherResponse = NetworkUtils.getResponseFromUrl(weatherRequestUrl);
+                return OpenWeatherJsonUtils
+                    .getSimpleWeatherStringsFromJson(MainActivity.this, jsonWeatherResponse);
+            } catch (IOException | JSONException e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String[] weatherData) {
+            mLoadingIndicator.setVisibility(View.INVISIBLE);
+            if (weatherData != null) {
+                showWeatherDataView();
+                for (String weatherString : weatherData)
+                    mWeatherTextView.append(weatherString + "\n\n\n");
+            } else {
+                showErrorMessage();
+            }
+        }
     }
 }
